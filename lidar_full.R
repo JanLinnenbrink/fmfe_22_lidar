@@ -43,9 +43,6 @@ opt_output_files(ctg) <- paste0(tempdir(), "{ID}_trees")
 ttops <- locate_trees(las, lmf(ws = 5))
 
 
-## c
-
-
 ## plots
 plot_dtm3d(dtm_tin, bg = "white")
 plot(nlas, size = 4, bg = "white")
