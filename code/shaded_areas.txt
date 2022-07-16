@@ -1,5 +1,5 @@
 cd C:\0_Msc_Loek\M7_Fernerkundung\fmfe_22_lidar
-r.import allPoints_dhm.tif output=dhm
+r.import dhm_smoothed.tif output=dhm
 g.region raster=dhm
 
 # mode 2: irradiation (W h m-2); 2022-06-01
