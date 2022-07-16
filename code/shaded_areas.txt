@@ -1,11 +1,11 @@
-cd C:\0_Msc_Loek\M7_Fernerkundung\fmfe_22_lidar
-r.import allPoints_dhm.tif output=dhm
+cd C:\0_Msc_Loek\M7_Fernerkundung\fmfe_22_lidar\raster
+r.import dhm_smoothed.tif output=dhm
 g.region raster=dhm
 
-# mode 2: irradiation (W h m-2)
-r.sun.hourly elevation=dhm year=2022 day=172  start=4 end=22 time_step=1 beam_rad_basename=beam_m2 mode=mode2 nprocs=4 -t --overwrite
+# mode 2: irradiation (W h m-2); 2022-06-01
+r.sun.hourly elevation=dhm year=2022 day=152  start=4 end=22 time_step=1 beam_rad_basename=beam_m2 mode=mode2 nprocs=4 -t --overwrite
 # cumulative:
-r.sun.hourly elevation=dhm year=2022 day=172  start=4 end=22 time_step=1 beam_rad_basename=beam_m2_cum mode=mode2 nprocs=4 -tc --overwrite
+r.sun.hourly elevation=dhm year=2022 day=152  start=4 end=22 time_step=1 beam_rad_basename=beam_m2_cum mode=mode2 nprocs=4 -tc --overwrite
 
 # g.gui.tplot strds=beam_m2_step_long,beam_m2_step_long_cum coordinates=280497,5652523
 t.rast.list beam_m2_step_long_cum
