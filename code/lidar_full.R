@@ -159,7 +159,7 @@ shadows <- rast(paste0("shadows/", shfiles))
 
 shadow <- app(shadows, "sum")
 plot(shadow, col = pals::inferno(50), 
-     plg = list(title = expression(paste('Cumulative Solar Irradiation', " ", "[Wh", " ",  m^-2,']'))))
+     plg = list(title = expression(paste('Solar Irradiation', " ", "[Wh", " ",  m^-2,']'))))
 
 
 thermal <- rast("thermal.tif")
