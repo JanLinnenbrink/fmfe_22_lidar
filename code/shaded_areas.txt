@@ -1,4 +1,4 @@
-cd C:\0_Msc_Loek\M7_Fernerkundung\fmfe_22_lidar
+cd C:\0_Msc_Loek\M7_Fernerkundung\fmfe_22_lidar\raster
 r.import dhm_smoothed.tif output=dhm
 g.region raster=dhm
 
