@@ -5,7 +5,7 @@ library(sf)
 
 setwd("C:/0_Msc_Loek/M7_Fernerkundung/lidar")
 
-plan(multisession, workers = availableCores()-5)
+plan(multisession, workers = availableCores()-2)
 
 ctg <-  readLAScatalog("clouddc03becdccbf85e0.las")
 
@@ -72,8 +72,8 @@ w <- matrix(1, 3, 3)
 dhm_smoothed <- terra::focal(filled, w, fun = mean, na.rm = TRUE)
 
 writeRaster(dhm_smoothed, "dhm_smoothed.tif", overwrite=TRUE)
-
-plot(dhm_smoothed,plg = list(title = "height (m above NN)"))
+dhm_smoothed <- rast("dhm_smoothed.tif")
+plot(dhm_smoothed,col = height.colors(50),plg = list(title = "height (m above NN)"))
 
 ## calculate canopy height model
 
@@ -92,7 +92,7 @@ filled <- terra::focal(chm, w, fun = fill.na)
 chm_smoothed <- focal(filled, w, fun = mean, na.rm = TRUE)
 
 
-plot(chm_smoothed,plg = list(title = "vegetation height (m)"))
+plot(chm_smoothed,col = height.colors(50),plg = list(title = "vegetation height (m)"))
 
 
 ## segment trees
