@@ -80,11 +80,17 @@ plot(dhm_smoothed,plg = list(title = "height (m above NN)"))
 #chm <- rasterize_canopy(ctg_norm, res = 1, algorithm = p2r())
 filled <- terra::focal(chm, w, fun = fill.na)
 w <- matrix(1, 7, 7)
-chm_smoothed <- focal(filled, w, fun = median, na.rm = TRUE)
+chm_smoothed <- focal(filled, w, fun = mean, na.rm = TRUE)
 
 #chm <- dhm - dtm_tin
 writeRaster(chm_smoothed, "chm_smoothed.tif", overwrite=TRUE)
-chm <- rast("chm_smoothed.tif")
+chm_smoothed <- rast("chm_smoothed.tif")
+chm <- rast("chm.tif")
+w <- matrix(1, 3, 3)
+fill.na <- function(x, i=5) { if (is.na(x)[i]) { return(mean(x, na.rm = TRUE)) } else { return(x[i]) }}
+filled <- terra::focal(chm, w, fun = fill.na)
+chm_smoothed <- focal(filled, w, fun = mean, na.rm = TRUE)
+
 
 plot(chm_smoothed,plg = list(title = "vegetation height (m)"))
 
@@ -106,8 +112,9 @@ st_write(ttops, "ttops.gpkg")
 ttops <- st_read("ttops.gpkg")
 
 
+
 plot(chm_smoothed, col = height.colors(50),plg = list(title = "vegetation height (m)"))
-plot(sf::st_geometry(ttops), add = TRUE, pch = 3)
+plot(sf::st_geometry(ttops[ttops$Z > 5,]), add = TRUE, pch = 3)
 
 # using lidar data
 plan(sequential)
