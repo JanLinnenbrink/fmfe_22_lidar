@@ -5,7 +5,7 @@ library(sf)
 
 setwd("C:/0_Msc_Loek/M7_Fernerkundung/lidar")
 
-plan(multisession, workers = availableCores()-2)
+plan(multisession, workers = availableCores()-4)
 
 ctg <-  readLAScatalog("clouddc03becdccbf85e0.las")
 
@@ -27,16 +27,16 @@ classified_ctg <- classify_ground(ctg, algorithm = csf())
 
 #classified_ctg <- readLAScatalog("ground_points")
 
-#plot(classified_ctg, color = "Classification", size=3)
+plot(classified_ctg, color = "Classification", size=3)
 
 ## calculate the dtm
-opt_output_files(classified_ctg) <- paste0(tempdir(), "{ID}_dtm_aktuell")
+opt_output_files(classified_ctg) <- paste0(tempdir(), "{ID}_dtm_aktuell_neu")
 opt_stop_early(classified_ctg) <- FALSE
 opt_chunk_buffer(classified_ctg) <- 4
 
-dtm_tin <- rasterize_terrain(classified_ctg, res = 1, algorithm = tin())
+dtm_tin <- rasterize_terrain(classified_ctg, res = 0.1, algorithm = tin())
 
-writeRaster(dtm_tin, "dtm.tif")
+writeRaster(dtm_tin, "dtm_0-1.tif")
 
 #dtm_tin <- rast("dtm.tif")
 
@@ -53,15 +53,16 @@ plan(sequential)
 
 ctg_norm <- normalize_height(classified_ctg, dtm_tin)
 
+#ctg_norm <- readLAScatalog(paste0(getwd(), "/nlas/"))
 
 ## calculate digital height model 
 plan(multisession, workers = availableCores()-2)
 
-opt_output_files(classified_ctg) <- paste0(tempdir(), "{ID}_dhm_new")
-dhm <- rasterize_canopy(classified_ctg, res = 1, algorithm = p2r())
+opt_output_files(classified_ctg) <- paste0(tempdir(), "{ID}_dhm_new_highres")
+dhm <- rasterize_canopy(classified_ctg, res = 0.1, algorithm = p2r())
 
-writeRaster(dhm, "dhm.tif")
-#dhm <- rast("dhm_smoothed.tif")
+writeRaster(dhm, "dhm_0-1.tif")
+dhm <- rast("dhm_smoothed.tif")
 
 
 # post processing of dhm
@@ -77,20 +78,13 @@ plot(dhm_smoothed,col = height.colors(50),plg = list(title = "height (m above NN
 
 ## calculate canopy height model
 
-#chm <- rasterize_canopy(ctg_norm, res = 1, algorithm = p2r())
+chm <- rasterize_canopy(ctg_norm, res = 0.1, algorithm = p2r())
 filled <- terra::focal(chm, w, fun = fill.na)
-w <- matrix(1, 7, 7)
 chm_smoothed <- focal(filled, w, fun = mean, na.rm = TRUE)
 
 #chm <- dhm - dtm_tin
-writeRaster(chm_smoothed, "chm_smoothed.tif", overwrite=TRUE)
+writeRaster(chm_smoothed, "chm_smoothed_0-1.tif", overwrite=TRUE)
 chm_smoothed <- rast("chm_smoothed.tif")
-chm <- rast("chm.tif")
-w <- matrix(1, 3, 3)
-fill.na <- function(x, i=5) { if (is.na(x)[i]) { return(mean(x, na.rm = TRUE)) } else { return(x[i]) }}
-filled <- terra::focal(chm, w, fun = fill.na)
-chm_smoothed <- focal(filled, w, fun = mean, na.rm = TRUE)
-
 
 plot(chm_smoothed,col = height.colors(50),plg = list(title = "vegetation height (m)"))
 
@@ -168,9 +162,15 @@ shfiles <- list.files("shadows", pattern = "*.tif")
 shadows <- rast(paste0("shadows/", shfiles))
 
 shadow <- app(shadows, "sum")
-plot(shadow, col = pals::inferno(50), 
+
+w <- matrix(1, 11,11)
+fill.na <- function(x, i=5) { if (is.na(x)[i]) { return(mean(x, na.rm = TRUE)) } else { return(x[i]) }}
+shadow_filled <- terra::focal(shadow, w, fun = fill.na)
+
+plot(shadow_filled, col = pals::inferno(50), 
      plg = list(title = expression(paste('Solar Irradiation', " ", "[Wh", " ",  m^-2,']'))))
 
+writeRaster(shadow_filled, "shadow.tif")
 
 thermal <- rast("thermal.tif")
 
