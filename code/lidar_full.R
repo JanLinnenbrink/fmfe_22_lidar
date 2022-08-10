@@ -38,7 +38,9 @@ dtm_tin <- rasterize_terrain(classified_ctg, res = 0.1, algorithm = tin())
 
 writeRaster(dtm_tin, "dtm_0-1.tif")
 
-#dtm_tin <- rast("dtm.tif")
+dtm_tin <- rast("dtm.tif")
+
+plot_dtm3d(dtm_tin, bg = "white") 
 
 dtm_prod <- terra::terrain(dtm_tin, v = c("slope", "aspect"), unit = "radians")
 dtm_hillshade <- terra::shade(slope = dtm_prod$slope, aspect = dtm_prod$aspect)
@@ -117,6 +119,7 @@ opt_output_files(ctg_norm) <- paste0(tempdir(), "/{*}_segmented")
 algo <- dalponte2016(chm, ttops)
 ctg_segmented <- segment_trees(ctg_norm, algo)
 
+
 plan(multisession, workers=availableCores()-2)
 
 crowns <- crown_metrics(ctg_segmented, func = .stdtreemetrics, geom = "convex")
@@ -131,6 +134,11 @@ plot(crowns, col = pastel.colors(200))
 
 ## complex metrices
 las <- readLAS("clouddc03becdccbf85e0.las", filter = "-keep_random_fraction 0.1")
+
+x <- plot(las, bg = "white", size = 4)
+add_treetops3d(x, ttops)
+
+
 las <- retrieve_pulses(las)
 las <- filter_firstlast(las)
 las <- filter_poi(las, NumberOfReturns > 1)
