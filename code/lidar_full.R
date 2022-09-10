@@ -3,7 +3,7 @@ library(future)
 library(terra)
 library(sf)
 
-setwd("C:/0_Msc_Loek/M7_Fernerkundung/lidar")
+setwd("C:/0_Msc_Loek/M7_Fernerkundung/fmfe_22_lidar")
 
 plan(multisession, workers = availableCores()-4)
 
@@ -189,3 +189,78 @@ res(thermal) <- res(shadow)
 
 plot(thermal)
 plot(shadow)
+
+
+### combine shadow and thermal data
+
+shadow <- rast(paste0(getwd(), "/raster/shadow.tif"))
+thermal <- rast(paste0(substr(getwd(), start = 1, stop = nchar(getwd())-13),
+                       "Thermal/Feldmethoden_Thermal_22062022_ETRS_modifiziert_p1_test2.tif")) |> 
+  project(crs(shadow))
+ref <- st_read(paste0(substr(getwd(), start = 1, stop = nchar(getwd())-13),
+                      "Thermal/Messpunkte_in_situ_thermal.shp"))
+
+ref_df <- st_drop_geometry(ref)
+ref_df <- ref_df[, c("id", "Wassertemp", "Tiefe")]
+ref_df[3,3] <- 38
+ref_df[1,3] <- 54
+ref_df[2,3] <- 77
+ref_df$Wassertemp <- substr(ref_df$Wassertemp, 1,4)
+ref_df$Wassertemp <- sub('\\,', '.', ref_df$Wassertemp)
+ref_df$Wassertemp <- as.numeric(ref_df$Wassertemp)
+ref_df$Tiefe <- as.numeric(ref_df$Tiefe)
+
+plot(ref)
+
+ref_sh <- extract(shadow, ref)
+ref_sh$id <- ref_sh$ID
+ref_sh$ID <- NULL
+
+ref_comb <- dplyr::full_join(ref_sh, ref_df)
+
+plot(x=ref_comb$sum, y=ref_comb$Wassertemp)
+
+
+# sample random points
+source(paste0(substr(getwd(), start = 1, stop = nchar(getwd())-13),
+              "sampleFromArea.R"))
+
+rp <- spatSample(thermal, 100000, method="regular", replace=FALSE, na.rm=FALSE,
+                 as.raster=FALSE, as.df=TRUE, as.points=TRUE, values=TRUE, 
+                 cells=FALSE, xy=FALSE, ext=NULL, warn=TRUE, weights=NULL) |> 
+  st_as_sf()
+
+rp$thermal <- rp$Feldmethoden_Thermal_22062022_ETRS_modifiziert_p1_test2
+rp$Feldmethoden_Thermal_22062022_ETRS_modifiziert_p1_test2 <- NULL
+rp <- rp[!is.na(rp$thermal),]
+
+plot(rp)
+
+sh_th <- extract(shadow, rp, bind = TRUE)
+sh_th$irradiance <- sh_th$sum
+sh_th$sum <- NULL
+sh_th <- sh_th[,!is.na(sh_th$irradiance)]
+sh_df <- st_drop_geometry(st_as_sf(sh_th))
+
+library(ggplot2)
+ggplot(sh_df, aes(x=irradiance,y=thermal)) +
+  geom_bin2d(bins = 40) +
+  geom_smooth(method = "lm") +
+  xlab( expression(paste('Solar Irradiation', " ", "[W", "h", " ",  m^-2,']'))) +
+  ylab("Temperature [°C]")
+
+ggplot(sh_df, aes(x=irradiance,y=thermal)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  xlab( expression(paste('Solar Irradiation', " ", "[W", "h", " ",  m^-2,']'))) +
+  ylab("Temperature [°C]")
+
+lm_pl <- ggplot(sh_df, aes(x=irradiance,y=thermal)) +
+  geom_density_2d_filled(show.legend = FALSE, contour_var = "density") +
+  geom_smooth(method = "lm", se = FALSE, colour = "white") +
+  xlab( expression(paste('Solar Irradiation', " ", "[W", "h", " ",  m^-2,']'))) +
+  ylab("Temperature [°C]") +
+  theme(aspect.ratio = 1)
+
+ggsave(paste0(getwd(), "/plots/temp_shadow.pdf"), lm_pl,
+       width = 12, height = 12, units = "cm")
