@@ -2,6 +2,7 @@ library(lidR)
 library(future)
 library(terra)
 library(sf)
+library(ggplot2)
 
 setwd("C:/0_Msc_Loek/M7_Fernerkundung/fmfe_22_lidar")
 
@@ -46,6 +47,7 @@ dtm_prod <- terra::terrain(dtm_tin, v = c("slope", "aspect"), unit = "radians")
 dtm_hillshade <- terra::shade(slope = dtm_prod$slope, aspect = dtm_prod$aspect)
 plot(dtm_hillshade, col = gray(0:50/50), legend = FALSE)
 plot(dtm_tin, col = height.colors(50),plg = list(title = "height (m above NN)"))
+plot(river_vec$geometry, add=TRUE)
 
 
 ## height normalization (not in parralel!)
@@ -86,9 +88,10 @@ chm_smoothed <- focal(filled, w, fun = mean, na.rm = TRUE)
 
 #chm <- dhm - dtm_tin
 writeRaster(chm_smoothed, "chm_smoothed_0-1.tif", overwrite=TRUE)
-chm_smoothed <- rast("chm_smoothed.tif")
+chm_smoothed <- rast("raster/chm_smoothed.tif")
 
 plot(chm_smoothed,col = height.colors(50),plg = list(title = "vegetation height (m)"))
+plot(river_vec$geometry, add=TRUE)
 
 
 ## segment trees
@@ -111,6 +114,9 @@ ttops <- st_read("ttops.gpkg")
 
 plot(chm_smoothed, col = height.colors(50),plg = list(title = "vegetation height (m)"))
 plot(sf::st_geometry(ttops[ttops$Z > 5,]), add = TRUE, pch = 3)
+plot(river_vec$geometry, add=TRUE)
+
+
 
 # using lidar data
 plan(sequential)
@@ -193,39 +199,39 @@ plot(shadow)
 
 ### combine shadow and thermal data
 
+dtm_tin <- rast("raster/allPoints_dtm.tif")
+
+dtm_tin_low <- dtm_tin
+dtm_tin_low[dtm_tin_low>100.5] <- NA
+plot(dtm_tin_low)
+
+river_vec <- terra::as.polygons(dtm_tin_low, dissolve = TRUE) |> 
+  st_as_sf() |> 
+  st_buffer(10) |> 
+  st_buffer(-10) |> 
+  nngeo::st_remove_holes()
+
+plot(river_vec)
+
 shadow <- rast(paste0(getwd(), "/raster/shadow.tif"))
 thermal <- rast(paste0(substr(getwd(), start = 1, stop = nchar(getwd())-13),
                        "Thermal/Feldmethoden_Thermal_22062022_ETRS_modifiziert_p1_test2.tif")) |> 
   project(crs(shadow))
+
 ref <- st_read(paste0(substr(getwd(), start = 1, stop = nchar(getwd())-13),
                       "Thermal/Messpunkte_in_situ_thermal.shp"))
 
-ref_df <- st_drop_geometry(ref)
-ref_df <- ref_df[, c("id", "Wassertemp", "Tiefe")]
-ref_df[3,3] <- 38
-ref_df[1,3] <- 54
-ref_df[2,3] <- 77
-ref_df$Wassertemp <- substr(ref_df$Wassertemp, 1,4)
-ref_df$Wassertemp <- sub('\\,', '.', ref_df$Wassertemp)
-ref_df$Wassertemp <- as.numeric(ref_df$Wassertemp)
-ref_df$Tiefe <- as.numeric(ref_df$Tiefe)
-
-plot(ref)
-
-ref_sh <- extract(shadow, ref)
-ref_sh$id <- ref_sh$ID
-ref_sh$ID <- NULL
-
-ref_comb <- dplyr::full_join(ref_sh, ref_df)
-
-plot(x=ref_comb$sum, y=ref_comb$Wassertemp)
+shadow_river <- terra::mask(shadow, st_transform(river_vec, st_crs(shadow)))
+thermal_river <- terra::mask(thermal, st_transform(river_vec, st_crs(shadow))) |> 
+  terra::crop(shadow)
+plot(thermal_river)
 
 
 # sample random points
 source(paste0(substr(getwd(), start = 1, stop = nchar(getwd())-13),
               "sampleFromArea.R"))
 
-rp <- spatSample(thermal, 100000, method="regular", replace=FALSE, na.rm=FALSE,
+rp <- spatSample(thermal_river, 10000, method="regular", replace=FALSE, na.rm=FALSE,
                  as.raster=FALSE, as.df=TRUE, as.points=TRUE, values=TRUE, 
                  cells=FALSE, xy=FALSE, ext=NULL, warn=TRUE, weights=NULL) |> 
   st_as_sf()
@@ -241,8 +247,9 @@ sh_th$irradiance <- sh_th$sum
 sh_th$sum <- NULL
 sh_th <- sh_th[,!is.na(sh_th$irradiance)]
 sh_df <- st_drop_geometry(st_as_sf(sh_th))
+sh_df <- sh_df[!is.na(sh_df$irradiance) & sh_df$irradiance>0, ]
 
-library(ggplot2)
+
 ggplot(sh_df, aes(x=irradiance,y=thermal)) +
   geom_bin2d(bins = 40) +
   geom_smooth(method = "lm") +
@@ -262,5 +269,8 @@ lm_pl <- ggplot(sh_df, aes(x=irradiance,y=thermal)) +
   ylab("Temperature [°C]") +
   theme(aspect.ratio = 1)
 
-ggsave(paste0(getwd(), "/plots/temp_shadow.pdf"), lm_pl,
+ggsave(paste0(getwd(), "/plots/temp_shadow_only_river.pdf"), lm_pl,
        width = 12, height = 12, units = "cm")
+
+
+
