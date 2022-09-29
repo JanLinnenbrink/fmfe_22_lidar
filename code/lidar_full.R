@@ -39,16 +39,21 @@ dtm_tin <- rasterize_terrain(classified_ctg, res = 0.1, algorithm = tin())
 
 writeRaster(dtm_tin, "dtm_0-1.tif")
 
-dtm_tin <- rast("dtm.tif")
+dtm_tin <- rast("raster/allPoints_dtm.tif")
 
 plot_dtm3d(dtm_tin, bg = "white") 
 
 dtm_prod <- terra::terrain(dtm_tin, v = c("slope", "aspect"), unit = "radians")
 dtm_hillshade <- terra::shade(slope = dtm_prod$slope, aspect = dtm_prod$aspect)
 plot(dtm_hillshade, col = gray(0:50/50), legend = FALSE)
-plot(dtm_tin, col = height.colors(50),plg = list(title = "height (m above NN)"))
-plot(river_vec$geometry, add=TRUE)
 
+p <- recordPlot()
+plot.new() ## clean up device
+plot(dtm_tin, col = height.colors(50),plg = list(title = "height (m above NN)"))
+plot(river_vec, add=TRUE, border="black")
+
+d <- plot(dtm_tin, col = height.colors(50),plg = list(title = "height (m above NN)"))
+d <- plot(river_vec, add=TRUE, border="black")
 
 ## height normalization (not in parralel!)
 dir.create(paste0(getwd(), "/nlas"))
@@ -88,10 +93,10 @@ chm_smoothed <- focal(filled, w, fun = mean, na.rm = TRUE)
 
 #chm <- dhm - dtm_tin
 writeRaster(chm_smoothed, "chm_smoothed_0-1.tif", overwrite=TRUE)
-chm_smoothed <- rast("raster/chm_smoothed.tif")
+chm_smoothed <- rast("./raster/chm_smoothed.tif")
 
 plot(chm_smoothed,col = height.colors(50),plg = list(title = "vegetation height (m)"))
-plot(river_vec$geometry, add=TRUE)
+plot(river_vec, add=TRUE)
 
 
 ## segment trees
@@ -211,21 +216,50 @@ river_vec <- terra::as.polygons(dtm_tin_low, dissolve = TRUE) |>
   st_buffer(-10) |> 
   nngeo::st_remove_holes()
 
+river_vec <- st_union(river_vec)
 plot(river_vec)
+
+st_write(river_vec, "river.shp")
 
 shadow <- rast(paste0(getwd(), "/raster/shadow.tif"))
 thermal <- rast(paste0(substr(getwd(), start = 1, stop = nchar(getwd())-13),
                        "Thermal/Feldmethoden_Thermal_22062022_ETRS_modifiziert_p1_test2.tif")) |> 
   project(crs(shadow))
+thermal_bbox <- st_bbox(st_as_sf(as.polygons(thermal, dissolve=TRUE)))
 
-ref <- st_read(paste0(substr(getwd(), start = 1, stop = nchar(getwd())-13),
-                      "Thermal/Messpunkte_in_situ_thermal.shp"))
+thermal <- crop(thermal,vect(st_as_sfc(thermal_bbox)))
+shadow <- crop(shadow, thermal) |> 
+  resample(thermal) |> 
+  mask(thermal)
 
-shadow_river <- terra::mask(shadow, st_transform(river_vec, st_crs(shadow)))
-thermal_river <- terra::mask(thermal, st_transform(river_vec, st_crs(shadow))) |> 
-  terra::crop(shadow)
-plot(thermal_river)
+th_sh <- c(thermal, shadow)
+names(th_sh) <- c("thermal", "shadow")
 
+th_sh$thermal[th_sh$thermal > 20] <- NA
+
+th_sh_r <- mask(th_sh, st_transform(river_vec, st_crs(th_sh$thermal)))
+
+raster::writeRaster(raster::stack(th_sh), "./raster/thermal_shadow.tif")
+
+th_sh <- rast("./raster/thermal_shadow.tif")
+names(th_sh) <- c("thermal", "shadow")
+
+thermal <- th_sh$thermal
+shadow <- th_sh$shadow
+
+
+writeRaster(thermal, "./raster/thermal_res.tif")
+writeRaster(shadow, "./raster/shadow_res.tif")
+
+thermal <- rast("./raster/thermal_res.tif")
+shadow <- rast("./raster/shadow_res.tif")
+
+plot(th_sh_r, col = pals::inferno(50))
+
+plot(shadow)
+plot(st_transform(river_vec, crs(shadow)), add=TRUE)
+plot(thermal)
+plot(st_transform(river_vec, crs(shadow)), add=TRUE)
 
 # sample random points
 source(paste0(substr(getwd(), start = 1, stop = nchar(getwd())-13),
@@ -271,6 +305,60 @@ lm_pl <- ggplot(sh_df, aes(x=irradiance,y=thermal)) +
 
 ggsave(paste0(getwd(), "/plots/temp_shadow_only_river.pdf"), lm_pl,
        width = 12, height = 12, units = "cm")
+
+
+
+
+
+# plots -------------------------------------------------------------------
+
+dtm_tin <- rast("raster/allPoints_dtm.tif")
+
+chm_smoothed <- rast("./raster/chm_smoothed_0-1.tif")
+ttops <- st_read("ttops.gpkg")
+
+shadow_filled <- rast("./raster/shadow.tif")
+river_vec <- st_read("river.shp") |> st_union()
+
+
+adj = 0
+font = 2
+
+png("comb.png", width = 50, height = 20, units="cm", res=1000)
+par(mfrow=c(1,3),oma=c(0,0,5,0), ann=TRUE, cex=1.2)
+
+plot(dtm_tin, col = height.colors(50))
+plot(river_vec, add=TRUE, border="black")
+mtext("Height above NN [m]", side=3, line=1, cex=1.4, adj=adj, font = font)
+
+plot(chm_smoothed, col = height.colors(50))
+plot(river_vec, add=TRUE, border="black")
+plot(sf::st_geometry(ttops), add = TRUE, pch = 3)
+mtext("Canopy height [m]",  side=3, line=1, cex=1.4, adj=adj, font = font)
+
+plot(shadow_filled, col = pals::inferno(50))
+plot(river_vec, add=TRUE, border="black")
+mtext(expression(paste(bold('Solar Irradiation'), " ", bold("[Wh"), " ",  bold(m^-2),bold(']'))),  side=3, line=1,
+      cex=1.4, adj=adj)
+
+dev.off()
+
+
+mat <- matrix(c(1, 2, 3), 
+              nrow = 1, ncol = 3,
+              byrow = TRUE)
+
+l <- layout(mat = mat)
+
+plot(dtm_tin, col = height.colors(50),plg = list(title = "height (m above NN)"))
+plot(river_vec, add=TRUE, border="black")
+
+
+plot(shadow_filled, col = pals::inferno(50), 
+     plg = list(title = expression(paste('Solar Irradiation', " ", "[Wh", " ",  m^-2,']'))))
+
+layout.show(l)
+plot.new()
 
 
 
